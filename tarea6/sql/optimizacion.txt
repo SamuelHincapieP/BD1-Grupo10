@@ -1,0 +1,28 @@
+-- ÍNDICES PARA JSONB E IoT
+-- Ejecutar después de cargar datos de prueba.
+
+-- Acelera búsquedas de contención sobre el JSONB de publicaciones.
+CREATE INDEX IF NOT EXISTS idx_publicacion_multimedia_gin
+ON publicacion USING GIN (multimedia);
+
+-- Acelera la consulta de lecturas recientes por dispositivo.
+CREATE INDEX IF NOT EXISTS idx_lectura_dispositivo_fecha
+ON lectura_iot (codigo_dispositivo, fecha_lectura DESC);
+
+-- Alternativa BRIN para tablas de lecturas muy grandes y ordenadas por fecha.
+CREATE INDEX IF NOT EXISTS idx_lectura_iot_fecha_brin
+ON lectura_iot USING BRIN (fecha_lectura);
+
+-- Verificación del plan de ejecución para JSONB.
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT codigo_publicacion, contenido, multimedia
+FROM publicacion
+WHERE multimedia @> '{"etiquetas": ["tecnologia"]}'::jsonb;
+
+-- Verificación del plan para las lecturas de un dispositivo.
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT codigo_dispositivo, fecha_lectura, datos
+FROM lectura_iot
+WHERE codigo_dispositivo = 1
+ORDER BY fecha_lectura DESC
+LIMIT 20;

@@ -1,0 +1,115 @@
+-- TAREA 6 - RED SOCIAL ESTUDIANTIL PASCUALINA
+-- Script DDL. Ejecute este archivo antes de cargar datos o consultas.
+
+CREATE TABLE programa_academico (
+  codigo_programa INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre_programa VARCHAR(100) NOT NULL UNIQUE, nivel VARCHAR(20) NOT NULL,
+  descripcion VARCHAR(255), CHECK (nivel IN ('tecnico','tecnologico','profesional'))
+);
+CREATE TABLE materia_asignatura (
+  codigo_materia INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre_materia VARCHAR(100) NOT NULL UNIQUE, creditos INTEGER NOT NULL CHECK (creditos > 0),
+  semestre INTEGER NOT NULL CHECK (semestre BETWEEN 1 AND 12),
+  codigo_programa INTEGER NOT NULL REFERENCES programa_academico(codigo_programa)
+);
+CREATE TABLE estudiante (
+  codigo_estudiante INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  nombre VARCHAR(50) NOT NULL, apellido VARCHAR(50) NOT NULL,
+  correo_institucional VARCHAR(100) NOT NULL UNIQUE, fecha_nacimiento DATE,
+  semestre INTEGER NOT NULL CHECK (semestre BETWEEN 1 AND 12), fecha_registro DATE NOT NULL DEFAULT CURRENT_DATE,
+  codigo_programa INTEGER NOT NULL REFERENCES programa_academico(codigo_programa), preferencias JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE perfil_social (
+  codigo_perfil INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  descripcion_personal VARCHAR(255), area_estudio VARCHAR(100), fotografia VARCHAR(255), biografia VARCHAR(500),
+  tipo_mentoria VARCHAR(50), codigo_estudiante INTEGER NOT NULL UNIQUE REFERENCES estudiante(codigo_estudiante),
+  configuracion JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE mentor_materia_habilitada (
+  codigo_estudiante INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante),
+  codigo_materia INTEGER NOT NULL REFERENCES materia_asignatura(codigo_materia),
+  fecha_habilitacion DATE NOT NULL DEFAULT CURRENT_DATE, certificado VARCHAR(255),
+  PRIMARY KEY (codigo_estudiante, codigo_materia)
+);
+CREATE TABLE sesion_mentoria (
+  codigo_sesion INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, fecha_sesion DATE NOT NULL, hora_sesion TIME NOT NULL,
+  tema VARCHAR(150) NOT NULL, estado VARCHAR(20) NOT NULL CHECK (estado IN ('programada','realizada','cancelada')),
+  codigo_mentor INTEGER NOT NULL, codigo_aprendiz INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante), codigo_materia INTEGER NOT NULL,
+  FOREIGN KEY (codigo_mentor, codigo_materia) REFERENCES mentor_materia_habilitada(codigo_estudiante, codigo_materia)
+);
+CREATE TABLE interes (codigo_interes INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_interes VARCHAR(80) NOT NULL UNIQUE, descripcion VARCHAR(255));
+CREATE TABLE habilidad (codigo_habilidad INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_habilidad VARCHAR(80) NOT NULL UNIQUE, descripcion VARCHAR(255));
+CREATE TABLE estudiante_interes (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_interes INTEGER REFERENCES interes(codigo_interes),
+  fecha_asociacion DATE NOT NULL DEFAULT CURRENT_DATE, PRIMARY KEY (codigo_estudiante, codigo_interes)
+);
+CREATE TABLE estudiante_habilidad (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_habilidad INTEGER REFERENCES habilidad(codigo_habilidad),
+  nivel VARCHAR(20) NOT NULL CHECK (nivel IN ('basico','intermedio','avanzado')), PRIMARY KEY (codigo_estudiante, codigo_habilidad)
+);
+CREATE TABLE tipo_publicacion (codigo_tipo_publicacion INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_tipo VARCHAR(50) NOT NULL UNIQUE, descripcion VARCHAR(255));
+CREATE TABLE publicacion (
+  codigo_publicacion INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, contenido VARCHAR(500) NOT NULL,
+  fecha_publicacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, archivo_adjunto VARCHAR(255),
+  codigo_estudiante INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante),
+  codigo_tipo_publicacion INTEGER NOT NULL REFERENCES tipo_publicacion(codigo_tipo_publicacion), multimedia JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE seguidor_estudiante (
+  codigo_seguidor INTEGER REFERENCES estudiante(codigo_estudiante), codigo_seguido INTEGER REFERENCES estudiante(codigo_estudiante),
+  fecha_seguimiento DATE NOT NULL DEFAULT CURRENT_DATE, PRIMARY KEY (codigo_seguidor, codigo_seguido), CHECK (codigo_seguidor <> codigo_seguido)
+);
+CREATE TABLE comentario (
+  codigo_comentario INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, contenido VARCHAR(500) NOT NULL,
+  fecha_comentario TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  codigo_estudiante INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante), codigo_publicacion INTEGER NOT NULL REFERENCES publicacion(codigo_publicacion)
+);
+CREATE TABLE reaccion (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_publicacion INTEGER REFERENCES publicacion(codigo_publicacion),
+  tipo_reaccion VARCHAR(20) NOT NULL CHECK (tipo_reaccion IN ('me_gusta','apoyo','interesante','celebrar')),
+  fecha_reaccion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (codigo_estudiante, codigo_publicacion)
+);
+CREATE TABLE tipo_recurso (codigo_tipo_recurso INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_tipo VARCHAR(50) NOT NULL UNIQUE, descripcion VARCHAR(255));
+CREATE TABLE recurso_academico (
+  codigo_recurso INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, titulo VARCHAR(150) NOT NULL, descripcion VARCHAR(500), url_archivo VARCHAR(255),
+  fecha_subida TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, codigo_estudiante INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante),
+  codigo_materia INTEGER NOT NULL REFERENCES materia_asignatura(codigo_materia), codigo_tipo_recurso INTEGER NOT NULL REFERENCES tipo_recurso(codigo_tipo_recurso),
+  metadatos JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE valoracion_recurso (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_recurso INTEGER REFERENCES recurso_academico(codigo_recurso),
+  puntuacion INTEGER NOT NULL CHECK (puntuacion BETWEEN 1 AND 5), comentario VARCHAR(255), fecha_valoracion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (codigo_estudiante, codigo_recurso)
+);
+CREATE TABLE tipo_grupo (codigo_tipo_grupo INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_tipo VARCHAR(50) NOT NULL UNIQUE, descripcion VARCHAR(255));
+CREATE TABLE grupo (
+  codigo_grupo INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_grupo VARCHAR(100) NOT NULL UNIQUE, descripcion VARCHAR(500), fecha_creacion DATE NOT NULL DEFAULT CURRENT_DATE,
+  codigo_estudiante_creador INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante), codigo_tipo_grupo INTEGER NOT NULL REFERENCES tipo_grupo(codigo_tipo_grupo)
+);
+CREATE TABLE evento (
+  codigo_evento INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_evento VARCHAR(100) NOT NULL, fecha_evento DATE NOT NULL, hora_evento TIME NOT NULL,
+  lugar VARCHAR(150), estado VARCHAR(20) NOT NULL CHECK (estado IN ('programado','realizado','cancelado')), descripcion VARCHAR(500),
+  codigo_estudiante_creador INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante), configuracion JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE miembro_grupo (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_grupo INTEGER REFERENCES grupo(codigo_grupo),
+  fecha_union DATE NOT NULL DEFAULT CURRENT_DATE, rol VARCHAR(20) NOT NULL DEFAULT 'miembro' CHECK (rol IN ('creador','administrador','miembro')),
+  PRIMARY KEY (codigo_estudiante, codigo_grupo)
+);
+CREATE TABLE asistencia_evento (
+  codigo_estudiante INTEGER REFERENCES estudiante(codigo_estudiante), codigo_evento INTEGER REFERENCES evento(codigo_evento),
+  estado_asistencia VARCHAR(20) NOT NULL CHECK (estado_asistencia IN ('inscrito','asistio','no_asistio','cancelado')),
+  fecha_inscripcion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (codigo_estudiante, codigo_evento)
+);
+CREATE TABLE dispositivo_iot (
+  codigo_dispositivo INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, nombre_dispositivo VARCHAR(100) NOT NULL,
+  tipo_dispositivo VARCHAR(50) NOT NULL, ubicacion VARCHAR(150) NOT NULL, estado VARCHAR(20) NOT NULL DEFAULT 'activo',
+  fecha_registro TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, configuracion JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+CREATE TABLE lectura_iot (
+  codigo_lectura INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, codigo_dispositivo INTEGER NOT NULL REFERENCES dispositivo_iot(codigo_dispositivo),
+  fecha_lectura TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, datos JSONB NOT NULL
+);
+CREATE TABLE notificacion (
+  codigo_notificacion INTEGER GENERATED ALWAYS AS IDENTITY PRIMARY KEY, codigo_estudiante INTEGER NOT NULL REFERENCES estudiante(codigo_estudiante),
+  mensaje VARCHAR(255) NOT NULL, tipo VARCHAR(50) NOT NULL, fecha_notificacion TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, leida BOOLEAN NOT NULL DEFAULT FALSE
+);

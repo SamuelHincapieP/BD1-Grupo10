@@ -1,0 +1,179 @@
+-- TAREA 6 - RED SOCIAL ESTUDIANTIL PASCUALINA
+-- Consultas ejecutadas en PostgreSQL
+
+-- CONSULTA 1: Publicaciones con autores y datos multimedia
+SELECT
+    p.codigo_publicacion,
+    e.nombre || ' ' || e.apellido AS autor,
+    tp.nombre_tipo AS tipo_publicacion,
+    p.contenido,
+    p.fecha_publicacion,
+    p.multimedia ->> 'tipo_archivo' AS tipo_archivo,
+    p.multimedia ->> 'formato' AS formato
+FROM publicacion p
+INNER JOIN estudiante e ON p.codigo_estudiante = e.codigo_estudiante
+INNER JOIN tipo_publicacion tp ON p.codigo_tipo_publicacion = tp.codigo_tipo_publicacion
+ORDER BY p.fecha_publicacion DESC;
+
+-- CONSULTA 2: Búsqueda de publicaciones mediante JSONB
+SELECT
+    p.codigo_publicacion,
+    e.nombre || ' ' || e.apellido AS autor,
+    p.contenido,
+    p.multimedia -> 'etiquetas' AS etiquetas
+FROM publicacion p
+INNER JOIN estudiante e ON p.codigo_estudiante = e.codigo_estudiante
+WHERE p.multimedia @> '{"etiquetas": ["tecnologia"]}'::jsonb;
+
+-- CONSULTA 3: Actividad general por estudiante
+SELECT
+    e.codigo_estudiante,
+    e.nombre,
+    e.apellido,
+    COUNT(DISTINCT p.codigo_publicacion) AS total_publicaciones,
+    COUNT(DISTINCT c.codigo_comentario) AS total_comentarios,
+    COUNT(DISTINCT r.codigo_publicacion) AS total_reacciones
+FROM estudiante e
+LEFT JOIN publicacion p ON e.codigo_estudiante = p.codigo_estudiante
+LEFT JOIN comentario c ON e.codigo_estudiante = c.codigo_estudiante
+LEFT JOIN reaccion r ON e.codigo_estudiante = r.codigo_estudiante
+GROUP BY e.codigo_estudiante, e.nombre, e.apellido
+ORDER BY total_publicaciones DESC, total_comentarios DESC, total_reacciones DESC;
+
+-- CONSULTA 4: Estudiantes con intereses de programación
+SELECT
+    e.codigo_estudiante,
+    e.nombre,
+    e.apellido,
+    pa.nombre_programa,
+    e.preferencias -> 'intereses' AS intereses
+FROM estudiante e
+INNER JOIN programa_academico pa ON e.codigo_programa = pa.codigo_programa
+WHERE e.preferencias @> '{"intereses": ["programacion"]}'::jsonb
+ORDER BY e.nombre;
+
+-- CONSULTA 5: Recursos académicos mejor valorados
+SELECT
+    ra.codigo_recurso,
+    ra.titulo,
+    ma.nombre_materia,
+    ra.metadatos ->> 'formato' AS formato,
+    COUNT(vr.codigo_estudiante) AS cantidad_valoraciones,
+    ROUND(AVG(vr.puntuacion), 2) AS promedio_valoracion
+FROM recurso_academico ra
+INNER JOIN materia_asignatura ma ON ra.codigo_materia = ma.codigo_materia
+LEFT JOIN valoracion_recurso vr ON ra.codigo_recurso = vr.codigo_recurso
+GROUP BY ra.codigo_recurso, ra.titulo, ma.nombre_materia
+ORDER BY promedio_valoracion DESC NULLS LAST;
+
+-- CONSULTA 6: Eventos y estudiantes inscritos
+SELECT
+    ev.codigo_evento,
+    ev.nombre_evento,
+    ev.fecha_evento,
+    ev.configuracion ->> 'modalidad' AS modalidad,
+    (ev.configuracion ->> 'capacidad')::INT AS capacidad_maxima,
+    COUNT(ae.codigo_estudiante) AS estudiantes_inscritos
+FROM evento ev
+LEFT JOIN asistencia_evento ae
+    ON ev.codigo_evento = ae.codigo_evento
+    AND ae.estado_asistencia IN ('inscrito', 'asistio')
+GROUP BY ev.codigo_evento, ev.nombre_evento, ev.fecha_evento
+ORDER BY estudiantes_inscritos DESC;
+
+-- CONSULTA 7: Historial de lecturas IoT
+SELECT
+    d.codigo_dispositivo,
+    d.nombre_dispositivo,
+    d.tipo_dispositivo,
+    d.ubicacion,
+    l.fecha_lectura,
+    l.datos
+FROM lectura_iot l
+INNER JOIN dispositivo_iot d ON l.codigo_dispositivo = d.codigo_dispositivo
+ORDER BY l.fecha_lectura DESC
+LIMIT 30;
+
+-- CONSULTA 8: Ocupación reciente de aulas
+SELECT
+    d.nombre_dispositivo,
+    d.ubicacion,
+    l.fecha_lectura,
+    (l.datos ->> 'personas')::INT AS cantidad_personas,
+    (l.datos ->> 'ocupado')::BOOLEAN AS aula_ocupada
+FROM dispositivo_iot d
+INNER JOIN lectura_iot l ON d.codigo_dispositivo = l.codigo_dispositivo
+WHERE d.tipo_dispositivo = 'ocupacion'
+  AND jsonb_typeof(l.datos -> 'personas') = 'number'
+ORDER BY l.fecha_lectura DESC
+LIMIT 30;
+
+-- CONSULTA 9: Promedio y máximo de ocupación
+SELECT
+    d.nombre_dispositivo,
+    d.ubicacion,
+    ROUND(AVG((l.datos ->> 'personas')::NUMERIC), 2) AS ocupacion_promedio,
+    MAX((l.datos ->> 'personas')::INT) AS ocupacion_maxima,
+    COUNT(*) AS total_mediciones
+FROM dispositivo_iot d
+INNER JOIN lectura_iot l ON d.codigo_dispositivo = l.codigo_dispositivo
+WHERE d.tipo_dispositivo = 'ocupacion'
+  AND jsonb_typeof(l.datos -> 'personas') = 'number'
+GROUP BY d.codigo_dispositivo, d.nombre_dispositivo, d.ubicacion
+ORDER BY ocupacion_promedio DESC;
+
+-- CONSULTA 10: Última lectura registrada por dispositivo
+SELECT
+    d.nombre_dispositivo,
+    d.tipo_dispositivo,
+    d.ubicacion,
+    ultima.fecha_lectura,
+    ultima.datos
+FROM dispositivo_iot d
+LEFT JOIN LATERAL (
+    SELECT l.fecha_lectura, l.datos
+    FROM lectura_iot l
+    WHERE l.codigo_dispositivo = d.codigo_dispositivo
+    ORDER BY l.fecha_lectura DESC, l.codigo_lectura DESC
+    LIMIT 1
+) ultima ON TRUE
+ORDER BY d.nombre_dispositivo;
+
+-- CONSULTA 11: Promedio ambiental de temperatura y humedad
+SELECT
+    d.nombre_dispositivo,
+    d.ubicacion,
+    ROUND(AVG((l.datos ->> 'temperatura')::NUMERIC), 2) AS temperatura_promedio,
+    ROUND(AVG((l.datos ->> 'humedad')::NUMERIC), 2) AS humedad_promedio,
+    COUNT(*) AS total_lecturas
+FROM dispositivo_iot d
+INNER JOIN lectura_iot l ON d.codigo_dispositivo = l.codigo_dispositivo
+WHERE d.tipo_dispositivo = 'ambiental'
+  AND jsonb_typeof(l.datos -> 'temperatura') = 'number'
+  AND jsonb_typeof(l.datos -> 'humedad') = 'number'
+GROUP BY d.codigo_dispositivo, d.nombre_dispositivo, d.ubicacion;
+
+-- CONSULTA 12: Análisis de volumen de datos IoT
+SELECT
+    (l.fecha_lectura AT TIME ZONE 'America/Bogota')::DATE AS fecha,
+    d.tipo_dispositivo,
+    COUNT(*) AS total_lecturas,
+    SUM(pg_column_size(l.datos)) AS bytes_datos_jsonb
+FROM lectura_iot l
+INNER JOIN dispositivo_iot d ON l.codigo_dispositivo = d.codigo_dispositivo
+GROUP BY (l.fecha_lectura AT TIME ZONE 'America/Bogota')::DATE, d.tipo_dispositivo
+ORDER BY fecha DESC;
+
+-- CONSULTA 13: Análisis de rendimiento de búsquedas JSONB
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT codigo_publicacion, contenido, multimedia
+FROM publicacion
+WHERE multimedia @> '{"etiquetas": ["tecnologia"]}'::jsonb;
+
+-- CONSULTA 14: Análisis de rendimiento de consultas IoT
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT codigo_dispositivo, fecha_lectura, datos
+FROM lectura_iot
+WHERE codigo_dispositivo = 1
+ORDER BY fecha_lectura DESC
+LIMIT 20;
